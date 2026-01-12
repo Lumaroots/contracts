@@ -1,0 +1,26 @@
+# Compiler output
+out/
+cache/
+
+# Broadcast logs (deployment artifacts)
+broadcast/
+
+# Dependencies
+lib/
+
+# Environment files (NEVER commit secrets!)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Foundry lock
+foundry.lock
+
