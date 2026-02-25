@@ -1,0 +1,731 @@
+# 🌳 LumaRoots Smart Contract - Flowchart
+
+## 0. Struktur Internal Smart Contract
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                        LumaRootsUpgradeable.sol                                     │
+│                        ════════════════════════                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  📦 INHERITANCE (Contract yang di-extend)                                           │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│   Initializable ─────► ERC721URIStorageUpgradeable ─────► OwnableUpgradeable        │
+│        │                       │                                │                   │
+│        │                       │                                │                   │
+│        └───────────────────────┼────────────────────────────────┘                   │
+│                                │                                                    │
+│                    PausableUpgradeable ────► ReentrancyGuard ────► UUPSUpgradeable  │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  📋 STRUCTS (Tipe Data Custom)                                                      │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│   ┌─────────────────────────┐        ┌─────────────────────────────────┐            │
+│   │      UserPlant          │        │         Purchase                │            │
+│   ├─────────────────────────┤        ├─────────────────────────────────┤            │
+│   │ lastWaterTime   uint256 │        │ buyer           address         │            │
+│   │ waterStreak     uint256 │        │ speciesId       uint256         │            │
+│   │ totalWaterCount uint256 │        │ projectId       uint256         │            │
+│   └─────────────────────────┘        │ amountPaid      uint256         │            │
+│                                      │ timestamp       uint256         │            │
+│                                      │ processed       bool            │            │
+│                                      │ nftMinted       bool            │            │
+│                                      └─────────────────────────────────┘            │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  💾 STATE VARIABLES (Data yang Disimpan di Blockchain)                              │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│   ┌─── SETTINGS ───────────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   cooldownTime          = 24 hours    (waktu tunggu antar siram)           │    │
+│   │   minPurchaseAmount     = 0.001 ether (min beli real tree)                 │    │
+│   │   premiumTreePrice      = 0.001 ether (harga premium virtual tree)         │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── POINTS SETTINGS ────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   pointsPerWater        = 10    (poin dasar per siram)                     │    │
+│   │   streakBonusPoints     = 5     (bonus per hari streak)                    │    │
+│   │   maxStreakBonus        = 7     (max 7 hari streak bonus)                  │    │
+│   │   pointsPerVirtualTree  = 500   (biaya redeem 1 virtual tree)              │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── COUNTERS ───────────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   _tokenIdCounter       (jumlah NFT yang sudah di-mint)                    │    │
+│   │   _purchaseIdCounter    (jumlah purchase yang sudah dibuat)                │    │
+│   │   totalPremiumTrees     (total premium trees terjual)                      │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── MAPPINGS (Data per User/ID) ────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   userPlants[address]           → UserPlant     (data gamifikasi)          │    │
+│   │   virtualTreeCount[address]     → uint256       (jumlah virtual trees)     │    │
+│   │   premiumTreeCount[address]     → uint256       (jumlah premium trees)     │    │
+│   │   hasClaimedFreeTree[address]   → bool          (sudah klaim free?)        │    │
+│   │   userPoints[address]           → uint256       (poin user)                │    │
+│   │   userPurchaseIds[address]      → uint256[]     (list purchase IDs)        │    │
+│   │   purchases[uint256]            → Purchase      (data purchase)            │    │
+│   │   tokenIdToPurchaseId[uint256]  → uint256       (link NFT ke purchase)     │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── CONSTANTS ──────────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   VERSION               = "1.0.0"                                          │    │
+│   │   MAX_PREMIUM_PER_TX    = 10                                               │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  ⚡ FUNCTIONS (Semua Fungsi dalam Contract)                                         │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│   ┌─── 🔧 INITIALIZE ──────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   constructor()              → disable initializers (proxy pattern)        │    │
+│   │   initialize(owner)          → setup awal contract                         │    │
+│   │   _authorizeUpgrade(impl)    → izinkan upgrade (onlyOwner)                 │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── 🎮 USER FUNCTIONS (Public) ─────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   claimFreeTree()                        → klaim 1 pohon gratis            │    │
+│   │   waterPlant()                           → siram harian, dapat poin        │    │
+│   │   redeemPointsForTree(qty)               → tukar poin → virtual tree       │    │
+│   │   purchasePremiumVirtualTree(qty) 💰     → beli virtual tree (MNT)         │    │
+│   │   purchaseTree(species, project, qty) 💰 → beli real tree (MNT)            │    │
+│   │                                                                            │    │
+│   │   💰 = payable (terima MNT)                                                │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── 👑 ADMIN FUNCTIONS (onlyOwner) ─────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   markPurchaseProcessed(purchaseId)      → tandai sudah diproses           │    │
+│   │   mintCertificate(id, uri, treeId)       → mint NFT sertifikat             │    │
+│   │   pause()                                → pause contract                  │    │
+│   │   unpause()                              → unpause contract                │    │
+│   │   setCooldownTime(seconds)               → atur waktu cooldown             │    │
+│   │   setMinPurchaseAmount(amount)           → atur minimum purchase           │    │
+│   │   setPremiumTreePrice(price)             → atur harga premium tree         │    │
+│   │   setPointsSettings(4 params)            → atur semua setting poin         │    │
+│   │   awardPoints(user, amount)              → beri bonus poin ke user         │    │
+│   │   emergencyWithdraw()                    → tarik semua balance             │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── 👁️ VIEW FUNCTIONS (Read Only - Gratis) ─────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   getTotalTreeCount(user)       → uint256 (virtual + real trees)           │    │
+│   │   getUserForest(user)           → (virtual, real, total, points, hasFree)  │    │
+│   │   getUserPlant(user)            → (lastWater, streak, totalCount)          │    │
+│   │   canWaterNow(user)             → (bool canWater, uint256 timeRemaining)   │    │
+│   │   calculateWaterPoints(user)    → (base, bonus, total points)              │    │
+│   │   getPurchase(id)               → Purchase data lengkap                    │    │
+│   │   getUserPurchases(user)        → uint256[] (list purchase IDs)            │    │
+│   │   getUserPurchaseCount(user)    → uint256                                  │    │
+│   │   getUserPremiumTrees(user)     → uint256                                  │    │
+│   │   getPointsSettings()           → (4 params settings)                      │    │
+│   │   getPremiumTreeStats()         → (total, price)                           │    │
+│   │   totalSupply()                 → uint256 (total NFT minted)               │    │
+│   │   totalPurchases()              → uint256 (total purchases)                │    │
+│   │   getImplementation()           → address (proxy implementation)           │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  📡 EVENTS (Log yang di-emit ke Blockchain)                                         │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│   ┌─── USER EVENTS ────────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   PlantWatered(user, streak, totalWater, pointsEarned, totalPoints, time)  │    │
+│   │   FreeTreeClaimed(user, timestamp)                                         │    │
+│   │   VirtualTreeRedeemed(user, pointsSpent, newTreeCount, timestamp)          │    │
+│   │   TreePurchased(purchaseId, buyer, speciesId, projectId, amount, time)     │    │
+│   │   PremiumVirtualTreePurchased(user, qty, amount, newTotal, timestamp)      │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── NFT EVENTS ─────────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   CertificateMinted(tokenId, owner, purchaseId, treeNationId)              │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│   ┌─── ADMIN EVENTS ───────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   CooldownTimeUpdated(oldCooldown, newCooldown)                            │    │
+│   │   MinPurchaseAmountUpdated(oldMin, newMin)                                 │    │
+│   │   PremiumTreePriceUpdated(oldPrice, newPrice)                              │    │
+│   │   PointsSettingsUpdated(pointsPerWater, streakBonus, maxStreak, redeem)    │    │
+│   │   ContractPaused(by, timestamp)                                            │    │
+│   │   ContractUnpaused(by, timestamp)                                          │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  🛡️ MODIFIERS (Kondisi yang Harus Dipenuhi)                                         │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│   whenNotPaused     → contract tidak dalam status pause                            │
+│   onlyOwner         → hanya owner yang bisa panggil                                │
+│   nonReentrant      → proteksi dari reentrancy attack                              │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 0.1 Ringkasan Isi Smart Contract
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     │
+│                          📊 SUMMARY                                                 │
+│                                                                                     │
+│   ┌────────────────────────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │   📦 Inheritance        : 6 contracts                                      │    │
+│   │   📋 Structs            : 2 (UserPlant, Purchase)                          │    │
+│   │   💾 State Variables    : 15+                                              │    │
+│   │   🗺️ Mappings           : 8                                                │    │
+│   │   ⚡ User Functions     : 5                                                │    │
+│   │   👑 Admin Functions    : 10                                               │    │
+│   │   👁️ View Functions     : 14                                               │    │
+│   │   📡 Events             : 11                                               │    │
+│   │   🛡️ Modifiers Used     : 3                                                │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+│                                                                                     │
+│   ┌────────────────────────────────────────────────────────────────────────────┐    │
+│   │                                                                            │    │
+│   │                        FITUR UTAMA                                         │    │
+│   │                                                                            │    │
+│   │   🌳 Virtual Trees      → Free claim, redeem points, atau beli             │    │
+│   │   🌲 Real Trees (RWA)   → Beli dengan MNT, dapat NFT certificate           │    │
+│   │   💧 Watering Game      → Daily activity, earn points + streak bonus       │    │
+│   │   🎯 Points System      → Earn & spend untuk virtual trees                 │    │
+│   │   🖼️ NFT Certificates   → ERC721 untuk real tree ownership                 │    │
+│   │   🔄 Upgradeable        → UUPS pattern untuk future updates                │    │
+│   │                                                                            │    │
+│   └────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 1. User Journey Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          NEW USER ONBOARDING                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │      Connect Wallet           │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │     claimFreeTree()           │
+                    │   (1 Virtual Tree GRATIS)     │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │      DAILY LOOP               │
+                    │      waterPlant()             │
+                    │   Earn Points + Streak        │
+                    └───────────────┬───────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │                               │
+                    ▼                               ▼
+        ┌─────────────────────┐       ┌─────────────────────────┐
+        │  Kumpulkan Points   │       │   Beli Premium Trees    │
+        │  redeemPointsFor    │       │   purchasePremiumVirtual│
+        │  Tree() (500 pts)   │       │   Tree() (0.001 MNT)    │
+        └──────────┬──────────┘       └────────────┬────────────┘
+                   │                               │
+                   └───────────────┬───────────────┘
+                                   │
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │   More Trees = More Points!   │
+                   │   Per Daily Water             │
+                   └───────────────┬───────────────┘
+                                   │
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │      purchaseTree()           │
+                   │   (Real Tree via Tree-Nation) │
+                   │      Get NFT Certificate!     │
+                   └───────────────────────────────┘
+```
+
+---
+
+## 2. Watering System Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           waterPlant() FLOW                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌───────────────────────────────┐
+                    │      User calls waterPlant()  │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │   Contract Paused?            │
+                    └───────────────┬───────────────┘
+                                    │
+                        ┌───────────┴───────────┐
+                        │ YES                   │ NO
+                        ▼                       ▼
+            ┌─────────────────┐     ┌─────────────────────────┐
+            │     REVERT      │     │  Check Cooldown         │
+            │  "Paused"       │     │  (24 hours passed?)     │
+            └─────────────────┘     └───────────┬─────────────┘
+                                                │
+                                    ┌───────────┴───────────┐
+                                    │ NO                    │ YES
+                                    ▼                       ▼
+                        ┌─────────────────┐     ┌─────────────────────────┐
+                        │     REVERT      │     │  Check Total Trees > 0  │
+                        │ "Cooldown not   │     └───────────┬─────────────┘
+                        │  finished"      │                 │
+                        └─────────────────┘     ┌───────────┴───────────┐
+                                                │ NO                    │ YES
+                                                ▼                       ▼
+                                    ┌─────────────────┐     ┌─────────────────┐
+                                    │     REVERT      │     │  Calculate      │
+                                    │ "No trees.      │     │  Streak         │
+                                    │  Claim first!"  │     └────────┬────────┘
+                                    └─────────────────┘              │
+                                                                     ▼
+                                                        ┌────────────────────────┐
+                                                        │ Last water > 2x        │
+                                                        │ cooldown ago?          │
+                                                        └───────────┬────────────┘
+                                                                    │
+                                                    ┌───────────────┴───────────────┐
+                                                    │ YES                           │ NO
+                                                    ▼                               ▼
+                                        ┌─────────────────┐             ┌─────────────────┐
+                                        │ Reset Streak    │             │ Streak += 1     │
+                                        │ streak = 1      │             └────────┬────────┘
+                                        └────────┬────────┘                      │
+                                                 │                               │
+                                                 └───────────────┬───────────────┘
+                                                                 │
+                                                                 ▼
+                                                    ┌────────────────────────┐
+                                                    │   CALCULATE POINTS     │
+                                                    │                        │
+                                                    │ base = 10 × totalTrees │
+                                                    │ bonus = min(streak-1,  │
+                                                    │         7) × 5         │
+                                                    │ total = base + bonus   │
+                                                    └───────────┬────────────┘
+                                                                │
+                                                                ▼
+                                                    ┌────────────────────────┐
+                                                    │   UPDATE STATE         │
+                                                    │                        │
+                                                    │ lastWaterTime = now    │
+                                                    │ totalWaterCount += 1   │
+                                                    │ userPoints += total    │
+                                                    └───────────┬────────────┘
+                                                                │
+                                                                ▼
+                                                    ┌────────────────────────┐
+                                                    │   EMIT PlantWatered    │
+                                                    │   ✓ SUCCESS            │
+                                                    └────────────────────────┘
+```
+
+---
+
+## 3. Points System Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         POINTS EARNING & SPENDING                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              EARN POINTS
+                                  │
+                                  ▼
+            ┌─────────────────────────────────────────┐
+            │              waterPlant()               │
+            │                                         │
+            │   Points = (10 × trees) + streak_bonus  │
+            │                                         │
+            │   Example: 5 trees, day 4 streak        │
+            │   = (10 × 5) + (3 × 5) = 65 points     │
+            └─────────────────────────────────────────┘
+                                  │
+                                  ▼
+            ┌─────────────────────────────────────────┐
+            │            userPoints[user]             │
+            │           (Points Balance)              │
+            └──────────────────┬──────────────────────┘
+                               │
+                               ▼
+            ┌─────────────────────────────────────────┐
+            │           SPEND POINTS                  │
+            │                                         │
+            │        redeemPointsForTree(qty)         │
+            │                                         │
+            │   Cost: 500 points per virtual tree     │
+            │                                         │
+            │   500 pts ──► 1 Virtual Tree            │
+            │   1000 pts ──► 2 Virtual Trees          │
+            │   2500 pts ──► 5 Virtual Trees          │
+            └─────────────────────────────────────────┘
+```
+
+---
+
+## 4. Real Tree Purchase Flow (RWA)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      REAL TREE PURCHASE FLOW                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    USER                         CONTRACT                      BACKEND/ADMIN
+      │                              │                              │
+      │  purchaseTree()              │                              │
+      │  + MNT payment               │                              │
+      │─────────────────────────────►│                              │
+      │                              │                              │
+      │                              │  Validate:                   │
+      │                              │  - qty 1-100                 │
+      │                              │  - msg.value >= min          │
+      │                              │  - valid species/project     │
+      │                              │                              │
+      │                              │  Create Purchase Record      │
+      │                              │  purchases[purchaseId]       │
+      │                              │                              │
+      │                              │  Transfer MNT to Owner       │
+      │                              │─────────────────────────────►│
+      │                              │                              │
+      │  ◄─── TreePurchased Event    │                              │
+      │                              │                              │
+      │                              │                              │
+      │                              │         Listen to Event      │
+      │                              │◄─────────────────────────────│
+      │                              │                              │
+      │                              │         Call Tree-Nation API │
+      │                              │         (Plant Real Tree)    │
+      │                              │                              │
+      │                              │                              │
+      │                              │  markPurchaseProcessed()     │
+      │                              │◄─────────────────────────────│
+      │                              │                              │
+      │                              │  mintCertificate()           │
+      │                              │  (tokenURI, treeNationId)    │
+      │                              │◄─────────────────────────────│
+      │                              │                              │
+      │  ◄─── NFT Certificate        │                              │
+      │       (ERC721)               │                              │
+      │                              │                              │
+      ▼                              ▼                              ▼
+```
+
+---
+
+## 5. Premium Virtual Tree Purchase Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PREMIUM VIRTUAL TREE PURCHASE                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌───────────────────────────────┐
+                    │ purchasePremiumVirtualTree()  │
+                    │ + MNT payment                 │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │   Validate:                   │
+                    │   - qty > 0                   │
+                    │   - qty <= 10 (max per tx)    │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │   Calculate Total Price       │
+                    │   total = qty × 0.001 MNT     │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │   msg.value >= totalPrice?    │
+                    └───────────────┬───────────────┘
+                                    │
+                        ┌───────────┴───────────┐
+                        │ NO                    │ YES
+                        ▼                       ▼
+            ┌─────────────────┐     ┌─────────────────────────┐
+            │     REVERT      │     │  Update State:          │
+            │ "Insufficient   │     │  virtualTreeCount += qty│
+            │  payment"       │     │  premiumTreeCount += qty│
+            └─────────────────┘     │  totalPremiumTrees += qty│
+                                    └───────────┬─────────────┘
+                                                │
+                                                ▼
+                                    ┌─────────────────────────┐
+                                    │  msg.value > totalPrice?│
+                                    └───────────┬─────────────┘
+                                                │
+                                    ┌───────────┴───────────┐
+                                    │ YES                   │ NO
+                                    ▼                       │
+                        ┌─────────────────┐                 │
+                        │ Refund Excess   │                 │
+                        │ to User         │                 │
+                        └────────┬────────┘                 │
+                                 │                          │
+                                 └───────────┬──────────────┘
+                                             │
+                                             ▼
+                                ┌─────────────────────────┐
+                                │ Transfer totalPrice     │
+                                │ to Owner                │
+                                └───────────┬─────────────┘
+                                            │
+                                            ▼
+                                ┌─────────────────────────┐
+                                │ EMIT PremiumVirtual     │
+                                │ TreePurchased           │
+                                │ ✓ SUCCESS               │
+                                └─────────────────────────┘
+```
+
+---
+
+## 6. Admin Functions Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          ADMIN FUNCTIONS                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              OWNER ONLY
+                                  │
+        ┌─────────────────────────┼─────────────────────────┐
+        │                         │                         │
+        ▼                         ▼                         ▼
+┌───────────────┐       ┌───────────────┐       ┌───────────────────┐
+│   SETTINGS    │       │  PROCESSING   │       │    EMERGENCY      │
+└───────────────┘       └───────────────┘       └───────────────────┘
+        │                         │                         │
+        ▼                         ▼                         ▼
+┌───────────────┐       ┌───────────────┐       ┌───────────────────┐
+│setCooldownTime│       │markPurchase   │       │     pause()       │
+│(seconds)      │       │Processed(id)  │       │                   │
+└───────────────┘       └───────────────┘       └───────────────────┘
+        │                         │                         │
+        ▼                         ▼                         ▼
+┌───────────────┐       ┌───────────────┐       ┌───────────────────┐
+│setMinPurchase │       │mintCertificate│       │    unpause()      │
+│Amount(wei)    │       │(id,uri,treeId)│       │                   │
+└───────────────┘       └───────────────┘       └───────────────────┘
+        │                                                   │
+        ▼                                                   ▼
+┌───────────────┐                               ┌───────────────────┐
+│setPoints      │                               │emergencyWithdraw()│
+│Settings(...)  │                               │                   │
+└───────────────┘                               └───────────────────┘
+        │
+        ▼
+┌───────────────┐
+│setPremiumTree │
+│Price(wei)     │
+└───────────────┘
+        │
+        ▼
+┌───────────────┐
+│awardPoints    │
+│(user, amount) │
+└───────────────┘
+```
+
+---
+
+## 7. Tree Count Calculation
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      getTotalTreeCount(user)                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌───────────────────────────────┐
+                    │       User's Forest           │
+                    └───────────────┬───────────────┘
+                                    │
+            ┌───────────────────────┼───────────────────────┐
+            │                       │                       │
+            ▼                       ▼                       ▼
+    ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
+    │ Virtual Trees │       │ Premium Trees │       │  Real Trees   │
+    │               │       │  (included in │       │ (purchases)   │
+    │ - Free claim  │       │   virtual)    │       │               │
+    │ - Redeemed    │       │               │       │ NFT Certs     │
+    │ - Premium     │       │               │       │               │
+    └───────┬───────┘       └───────────────┘       └───────┬───────┘
+            │                                               │
+            │  virtualTreeCount[user]                       │  userPurchaseIds[user].length
+            │                                               │
+            └───────────────────────┬───────────────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │         TOTAL TREES           │
+                    │  = virtualTrees + realTrees   │
+                    └───────────────────────────────┘
+```
+
+---
+
+## 8. Streak Bonus Calculation
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        STREAK BONUS SYSTEM                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    Day 1       Day 2       Day 3       Day 4       Day 5       Day 6       Day 7+
+      │           │           │           │           │           │           │
+      ▼           ▼           ▼           ▼           ▼           ▼           ▼
+  ┌───────┐   ┌───────┐   ┌───────┐   ┌───────┐   ┌───────┐   ┌───────┐   ┌───────┐
+  │Streak │   │Streak │   │Streak │   │Streak │   │Streak │   │Streak │   │Streak │
+  │  = 1  │   │  = 2  │   │  = 3  │   │  = 4  │   │  = 5  │   │  = 6  │   │  = 7+ │
+  └───┬───┘   └───┬───┘   └───┬───┘   └───┬───┘   └───┬───┘   └───┬───┘   └───┬───┘
+      │           │           │           │           │           │           │
+      ▼           ▼           ▼           ▼           ▼           ▼           ▼
+  ┌───────┐   ┌───────┐   ┌───────┐   ┌───────┐   ┌───────┐   ┌───────┐   ┌───────┐
+  │Bonus  │   │Bonus  │   │Bonus  │   │Bonus  │   │Bonus  │   │Bonus  │   │Bonus  │
+  │  = 0  │   │  = 5  │   │ = 10  │   │ = 15  │   │ = 20  │   │ = 25  │   │ = 35  │
+  │ pts   │   │ pts   │   │ pts   │   │ pts   │   │ pts   │   │ pts   │   │ (MAX) │
+  └───────┘   └───────┘   └───────┘   └───────┘   └───────┘   └───────┘   └───────┘
+
+
+                        ⚠️ MISS A DAY (> 48 hours)?
+                                    │
+                                    ▼
+                        ┌───────────────────────┐
+                        │   STREAK RESETS TO 1  │
+                        │   Bonus back to 0     │
+                        └───────────────────────┘
+```
+
+---
+
+## 9. Contract State Machine
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        CONTRACT STATES                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌───────────────────────────────┐
+                    │         UNPAUSED              │
+                    │      (Normal State)           │
+                    │                               │
+                    │  ✓ claimFreeTree()            │
+                    │  ✓ waterPlant()               │
+                    │  ✓ redeemPointsForTree()      │
+                    │  ✓ purchasePremiumVirtual...  │
+                    │  ✓ purchaseTree()             │
+                    │  ✓ All view functions         │
+                    │  ✓ Admin functions            │
+                    └───────────────┬───────────────┘
+                                    │
+                              pause()
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │          PAUSED               │
+                    │     (Emergency State)         │
+                    │                               │
+                    │  ✗ claimFreeTree()            │
+                    │  ✗ waterPlant()               │
+                    │  ✗ redeemPointsForTree()      │
+                    │  ✗ purchasePremiumVirtual...  │
+                    │  ✗ purchaseTree()             │
+                    │  ✓ All view functions         │
+                    │  ✓ Admin functions            │
+                    └───────────────┬───────────────┘
+                                    │
+                             unpause()
+                                    │
+                                    ▼
+                            (Back to UNPAUSED)
+```
+
+---
+
+## 10. Summary Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     🌳 LUMAROOTS ECOSYSTEM 🌳                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────┐                                      ┌─────────────┐
+    │             │         ┌─────────────────┐          │             │
+    │    USER     │◄───────►│   SMART         │◄────────►│   ADMIN     │
+    │             │         │   CONTRACT      │          │   (Owner)   │
+    └─────────────┘         └────────┬────────┘          └─────────────┘
+          │                          │                          │
+          │                          │                          │
+          ▼                          ▼                          ▼
+    ┌─────────────┐         ┌─────────────────┐          ┌─────────────┐
+    │ • Claim     │         │ • ERC721 NFTs   │          │ • Process   │
+    │   Free Tree │         │ • Points System │          │   Purchases │
+    │ • Water     │         │ • Purchase      │          │ • Mint NFTs │
+    │   Daily     │         │   Records       │          │ • Settings  │
+    │ • Redeem    │         │ • User Data     │          │ • Pause     │
+    │   Points    │         │                 │          │             │
+    │ • Buy Trees │         │                 │          │             │
+    └─────────────┘         └────────┬────────┘          └─────────────┘
+                                     │
+                                     ▼
+                            ┌─────────────────┐
+                            │   TREE-NATION   │
+                            │      API        │
+                            │  (Real Trees)   │
+                            └─────────────────┘
+```
+
+---
+
+*Generated for LumaRoots Smart Contract v1.0.0*
